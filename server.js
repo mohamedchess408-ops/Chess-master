@@ -76,13 +76,13 @@ app.post('/api/auth/register',(req,res)=>{
   const role=db.prepare('SELECT id FROM users LIMIT 1').get()?'customer':'admin';
   const id=db.prepare('INSERT INTO users(name,email,password_hash,chess_username,contact,role) VALUES(?,?,?,?,?,?)')
    .run(String(name).trim(),email(e),hash(password),String(chess_username).trim(),String(contact).trim(),role).lastInsertRowid;
-  req.session.userId=id;res.json({user:pub(current(req))});
+  req.session.userId=id;req.session.save(err=>{if(err)return res.status(500).json({error:'Could not save login session.'});res.json({user:pub(current(req))})});
  }catch{res.status(400).json({error:'This email is already registered.'})}
 });
 app.post('/api/auth/login',(req,res)=>{
  const u=db.prepare('SELECT * FROM users WHERE email=?').get(email(req.body?.email));
  if(!u||!verify(req.body?.password,u.password_hash))return res.status(401).json({error:'Invalid email or password.'});
- req.session.userId=u.id;res.json({user:pub(u)});
+ req.session.userId=u.id;req.session.save(err=>{if(err)return res.status(500).json({error:'Could not save login session.'});res.json({user:pub(u)})});
 });
 app.post('/api/auth/logout',(req,res)=>req.session.destroy(()=>res.json({ok:true})));
 app.put('/api/profile',auth,(req,res)=>{
