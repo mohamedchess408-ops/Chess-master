@@ -47,7 +47,7 @@ const pub=u=>u&&({id:u.id,name:u.name,email:u.email,chess_username:u.chess_usern
 const tokenHash=t=>crypto.createHash('sha256').update(String(t)).digest('hex');
 const issueToken=userId=>{const raw=crypto.randomBytes(32).toString('hex');db.prepare('DELETE FROM auth_tokens WHERE expires_at<?').run(Date.now());db.prepare('INSERT INTO auth_tokens(token_hash,user_id,expires_at) VALUES(?,?,?)').run(tokenHash(raw),userId,Date.now()+AUTH_TTL_MS);return raw};
 const bearer=req=>{const h=String(req.headers.authorization||'');return h.startsWith('Bearer ')?h.slice(7).trim():''};
-const current=req=>{if(req.session.userId){const u=db.prepare('SELECT * FROM users WHERE id=?').get(req.session.userId);if(u)return u}const t=bearer(req);if(!t)return null;const row=db.prepare('SELECT user_id,expires_at FROM auth_tokens WHERE token_hash=?').get(tokenHash(t));if(!row||row.expires_at<Date.now())return null;return db.prepare('SELECT * FROM users WHERE id=?').get(row.user_id)};
+const current=req=>{if(req.session.userId){const u=db.prepare('SELECT * FROM users WHERE id=?').get(req.session.userId);if(u)return u}const t=bearer(req);if(!t)return null;const row=db.prepare('SELECT user_id,expires_at FROM auth_tokens WHERE token_hash=?').get(tokenHash(t));if(!row||row.expires_at<Date.now()){if(row)db.prepare('DELETE FROM auth_tokens WHERE token_hash=?').run(tokenHash(t));return null}const u=db.prepare('SELECT * FROM users WHERE id=?').get(row.user_id);if(u&&req.session)req.session.userId=u.id;return u};
 const auth=(req,res,next)=>{if(!current(req))return res.status(401).json({error:'Please log in first'});next()};
 const admin=(req,res,next)=>{const u=current(req);if(!u||u.role!=='admin')return res.status(403).json({error:'Admin only'});req.user=u;next()};
 
@@ -95,7 +95,7 @@ app.post('/api/auth/logout',(req,res)=>{const t=bearer(req);if(t)db.prepare('DEL
 app.put('/api/profile',auth,(req,res)=>{
  const {name,chess_username='',contact=''}=req.body||{};
  if(!String(name||'').trim())return res.status(400).json({error:'Name is required.'});
- db.prepare('UPDATE users SET name=?,chess_username=?,contact=? WHERE id=?').run(String(name).trim(),String(chess_username).trim(),String(contact).trim(),req.session.userId);
+ db.prepare('UPDATE users SET name=?,chess_username=?,contact=? WHERE id=?').run(String(name).trim(),String(chess_username).trim(),String(contact).trim(),current(req).id);
  res.json({user:pub(current(req))});
 });
 
@@ -168,13 +168,13 @@ app.post('/api/paypal/create-order',auth,async(req,res)=>{
   const {base,token}=await paypalToken();
   const r=await fetch(base+'/v2/checkout/orders',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({intent:'CAPTURE',purchase_units:[{reference_id:String(c.id),description:c.title,amount:{currency_code:'USD',value:(c.price_cents/100).toFixed(2)}}]})});
   const j=await r.json();if(!r.ok)throw Error(j.message||'Could not create PayPal order.');
-  db.prepare('INSERT INTO purchases(user_id,course_id,paypal_order_id,amount_cents,status) VALUES(?,?,?,?,?)').run(req.session.userId,c.id,j.id,c.price_cents,'pending');
+  db.prepare('INSERT INTO purchases(user_id,course_id,paypal_order_id,amount_cents,status) VALUES(?,?,?,?,?)').run(current(req).id,c.id,j.id,c.price_cents,'pending');
   res.json({id:j.id});
  }catch(e){res.status(500).json({error:e.message})}
 });
 app.post('/api/paypal/capture-order',auth,async(req,res)=>{
  try{
-  const p=db.prepare('SELECT * FROM purchases WHERE paypal_order_id=? AND user_id=?').get(req.body?.order_id,req.session.userId);
+  const p=db.prepare('SELECT * FROM purchases WHERE paypal_order_id=? AND user_id=?').get(req.body?.order_id,current(req).id);
   if(!p)return res.status(404).json({error:'Purchase not found.'});
   const {base,token}=await paypalToken();
   const r=await fetch(base+'/v2/checkout/orders/'+encodeURIComponent(p.paypal_order_id)+'/capture',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'});
