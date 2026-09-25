@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chess Mastery</title>
-<style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.css"><style>
 body{font-family:Arial,sans-serif;background:#0b1020;color:#eef;max-width:1000px;margin:auto;padding:24px}
 .card{background:#151d33;padding:20px;border-radius:14px;margin:14px 0;box-shadow:0 8px 30px #0003}
 button{padding:10px 14px;border:0;border-radius:9px;background:#7357ff;color:white;font-weight:bold;cursor:pointer}
 input,textarea{width:100%;box-sizing:border-box;padding:11px;margin:6px 0 12px;background:#0d1426;color:white;border:1px solid #33405e;border-radius:8px}
 .muted{color:#9aa8c2}.row{display:flex;gap:10px;flex-wrap:wrap}.chapter{padding:10px;border:1px solid #33405e;border-radius:8px;margin:7px 0}
-</style></head><body><h1>♟ Chess Mastery</h1><p class="muted">Your chess training platform.</p><div id="app"></div>
-<script>
+</style><style>.courseView{display:grid;grid-template-columns:minmax(300px,520px) 1fr;gap:20px}.board{width:min(520px,100%);margin:auto}.moves{max-height:420px;overflow:auto;background:#0d1426;padding:12px;border-radius:10px}.move{display:inline-block;padding:5px 7px;border-radius:6px;cursor:pointer}.move.active{background:#7357ff}.adminUser{padding:8px;border-bottom:1px solid #33405e}@media(max-width:750px){.courseView{grid-template-columns:1fr}}</style></head><body><h1>♟ Chess Mastery</h1><p class="muted">Your chess training platform.</p><div id="app"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.js"></script><script>
 let me=null;
 const A=async(u,o={})=>{let r=await fetch(u,{headers:{'Content-Type':'application/json'},...o}),j=await r.json();if(!r.ok)throw Error(j.error||'Error');return j};
 async function render(){
@@ -19,7 +19,13 @@ async function render(){
 async function login(){try{await A('/api/auth/login',{method:'POST',body:JSON.stringify({email:e.value,password:p.value})});render()}catch(x){alert(x.message)}}
 async function reg(){try{await A('/api/auth/register',{method:'POST',body:JSON.stringify({name:n.value,email:re.value,password:rp.value,chess_username:ch.value,contact:co.value})});render()}catch(x){alert(x.message)}}
 async function logout(){await A('/api/auth/logout',{method:'POST'});render()}
-async function openC(id){let c=await A('/api/courses/'+id);let paid=c.price_cents>0&&!c.purchased&&c.chapters.some(x=>x.locked);if(paid){let o=await A('/api/paypal/create-order',{method:'POST',body:JSON.stringify({course_id:id})});if(confirm('PayPal order created. Continue to PayPal checkout?')) window.open('https://www.paypal.com/checkoutnow?token='+encodeURIComponent(o.id),'_blank');return}alert(c.chapters.map(x=>x.chapter_number+'. '+x.title+(x.locked?' 🔒':'')).join('\n'))}
+let board=null,positions=[],sans=[],ply=0;
+async function openC(id){let c=await A('/api/courses/'+id);let first=c.chapters.find(x=>!x.locked);document.getElementById('app').innerHTML='<button onclick="render()">← Back</button><div class="card"><h2>'+c.title+'</h2><p>'+c.description+'</p><div class="courseView"><div><div id="board" class="board"></div><div class="row"><button onclick="go(0)">⏮</button><button onclick="go(ply-1)">◀ Prev</button><button onclick="go(ply+1)">Next ▶</button><button onclick="go(positions.length-1)">⏭</button></div><p id="counter" class="muted"></p></div><div><h3>First 30 full moves</h3><div id="moves" class="moves"></div></div></div></div>';if(!first){document.getElementById('moves').innerHTML='<p>🔒 Course locked. <button onclick="buyCourse('+id+')">Pay with PayPal</button></p>';return}setupBoard(first.pgn)}
+function setupBoard(pgn){let g=new Chess();positions=[g.fen()];sans=[];for(const x of String(pgn||'').split(/\s+/)){if(!x)continue;try{let m=g.move(x,{sloppy:true});if(m){sans.push(m.san);positions.push(g.fen())}}catch(e){}}positions=positions.slice(0,61);sans=sans.slice(0,60);ply=0;board=Chessboard('board',{position:positions[0],draggable:false});drawMoves();updateBoard()}
+function go(n){ply=Math.max(0,Math.min(n,positions.length-1));updateBoard()}
+function updateBoard(){if(board)board.position(positions[ply]);let c=document.getElementById('counter');if(c)c.textContent='Move '+Math.ceil(ply/2)+' · '+ply+' ply · up to 30 full moves';drawMoves()}
+function drawMoves(){let e=document.getElementById('moves');if(!e)return;let o='';sans.forEach((m,i)=>o+='<span class="move '+(ply===i+1?'active':'')+'" onclick="go('+(i+1)+')">'+(i%2===0?(Math.floor(i/2)+1)+'. ':'')+m+'</span> ');e.innerHTML=o}
+async function buyCourse(id){try{let o=await A('/api/paypal/create-order',{method:'POST',body:JSON.stringify({course_id:id})});window.open('https://www.paypal.com/checkoutnow?token='+encodeURIComponent(o.id),'_blank')}catch(e){alert(e.message)}}
 async function savePayPal(){try{await A('/api/admin/paypal',{method:'POST',body:JSON.stringify({client_id:pi.value,client_secret:ps.value,env:pe.value})});alert('PayPal settings saved')}catch(e){alert(e.message)}}
 async function createC(){try{let x=await A('/api/admin/courses',{method:'POST',body:JSON.stringify({title:ct.value,description:cd.value,price_cents:Number(cp.value)*100,free_chapters:Number(cf.value),pgn:pg.value})});alert('Created '+x.chapters+' chapters');render()}catch(e){alert(e.message)}}
 render();
