@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express=require('express');
 const session=require('express-session');
+const AUTH_TTL_MS=1000*60*60*24*30;
 const Database=require('better-sqlite3');
 const crypto=require('crypto');
 const path=require('path');
@@ -31,6 +32,10 @@ CREATE TABLE IF NOT EXISTS purchases(
  paypal_order_id TEXT UNIQUE,amount_cents INTEGER,status TEXT DEFAULT 'pending',
  created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS auth_tokens(
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ token_hash TEXT UNIQUE NOT NULL,user_id INTEGER NOT NULL,expires_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS paypal_settings(
  id INTEGER PRIMARY KEY CHECK(id=1),client_id TEXT,client_secret TEXT,env TEXT DEFAULT 'sandbox'
 );`);
@@ -39,7 +44,10 @@ const email=x=>String(x||'').trim().toLowerCase();
 const hash=p=>{const s=crypto.randomBytes(16);return s.toString('hex')+':'+crypto.scryptSync(String(p),s,64).toString('hex')};
 const verify=(p,x)=>{try{const [a,b]=String(x).split(':');return crypto.timingSafeEqual(crypto.scryptSync(String(p),Buffer.from(a,'hex'),64),Buffer.from(b,'hex'))}catch{return false}};
 const pub=u=>u&&({id:u.id,name:u.name,email:u.email,chess_username:u.chess_username,contact:u.contact,role:u.role,created_at:u.created_at});
-const current=req=>req.session.userId?db.prepare('SELECT * FROM users WHERE id=?').get(req.session.userId):null;
+const tokenHash=t=>crypto.createHash('sha256').update(String(t)).digest('hex');
+const issueToken=userId=>{const raw=crypto.randomBytes(32).toString('hex');db.prepare('DELETE FROM auth_tokens WHERE expires_at<?').run(Date.now());db.prepare('INSERT INTO auth_tokens(token_hash,user_id,expires_at) VALUES(?,?,?)').run(tokenHash(raw),userId,Date.now()+AUTH_TTL_MS);return raw};
+const bearer=req=>{const h=String(req.headers.authorization||'');return h.startsWith('Bearer ')?h.slice(7).trim():''};
+const current=req=>{if(req.session.userId){const u=db.prepare('SELECT * FROM users WHERE id=?').get(req.session.userId);if(u)return u}const t=bearer(req);if(!t)return null;const row=db.prepare('SELECT user_id,expires_at FROM auth_tokens WHERE token_hash=?').get(tokenHash(t));if(!row||row.expires_at<Date.now())return null;return db.prepare('SELECT * FROM users WHERE id=?').get(row.user_id)};
 const auth=(req,res,next)=>{if(!current(req))return res.status(401).json({error:'Please log in first'});next()};
 const admin=(req,res,next)=>{const u=current(req);if(!u||u.role!=='admin')return res.status(403).json({error:'Admin only'});req.user=u;next()};
 
@@ -75,15 +83,15 @@ app.post('/api/auth/register',(req,res)=>{
   const role=db.prepare('SELECT id FROM users LIMIT 1').get()?'customer':'admin';
   const id=db.prepare('INSERT INTO users(name,email,password_hash,chess_username,contact,role) VALUES(?,?,?,?,?,?)')
    .run(String(name).trim(),email(e),hash(password),String(chess_username).trim(),String(contact).trim(),role).lastInsertRowid;
-  req.session.userId=id;res.json({user:pub(current(req))});
+  req.session.userId=id;res.json({user:pub(current(req)),token:issueToken(id)});
  }catch{res.status(400).json({error:'This email is already registered.'})}
 });
 app.post('/api/auth/login',(req,res)=>{
  const u=db.prepare('SELECT * FROM users WHERE email=?').get(email(req.body?.email));
  if(!u||!verify(req.body?.password,u.password_hash))return res.status(401).json({error:'Invalid email or password.'});
- req.session.userId=u.id;res.json({user:pub(u)});
+ req.session.userId=u.id;res.json({user:pub(u),token:issueToken(u.id)});
 });
-app.post('/api/auth/logout',(req,res)=>req.session.destroy(()=>res.json({ok:true})));
+app.post('/api/auth/logout',(req,res)=>{const t=bearer(req);if(t)db.prepare('DELETE FROM auth_tokens WHERE token_hash=?').run(tokenHash(t));req.session.destroy(()=>res.json({ok:true}))});
 app.put('/api/profile',auth,(req,res)=>{
  const {name,chess_username='',contact=''}=req.body||{};
  if(!String(name||'').trim())return res.status(400).json({error:'Name is required.'});
