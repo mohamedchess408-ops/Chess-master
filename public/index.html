@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chess Mastery</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.css"><style>
+<style>
 body{font-family:Inter,Arial,sans-serif;background:linear-gradient(135deg,#080d18,#111a2d);color:#eef;max-width:1180px;margin:auto;padding:28px}h1{font-size:34px;margin-bottom:4px}h2{margin-top:10px}.card{background:rgba(21,29,51,.92);padding:22px;border-radius:16px;margin:14px 0;box-shadow:0 12px 35px #0005;border:1px solid #263454}
 .card{background:#151d33;padding:20px;border-radius:14px;margin:14px 0;box-shadow:0 8px 30px #0003}
 button{padding:10px 14px;border:0;border-radius:9px;background:#7357ff;color:white;font-weight:bold;cursor:pointer}
@@ -12,14 +12,18 @@ input,textarea{width:100%;box-sizing:border-box;padding:11px;margin:6px 0 12px;b
 .moves{max-height:520px;overflow:auto;background:#161b22;padding:16px;border-radius:12px;border:1px solid #30363d}
 .move{display:inline-block;padding:7px 9px;border-radius:7px;cursor:pointer;font-family:monospace}
 .move:hover{background:#21262d}.move.active{background:#629924;color:#fff}
-.realBoard{width:100%;aspect-ratio:1;border-radius:4px;overflow:hidden;display:grid;grid-template-columns:repeat(8,1fr);box-shadow:0 16px 40px #0009}
-.sq{display:flex;align-items:center;justify-content:center;position:relative;font-size:clamp(34px,6vw,68px);line-height:1;user-select:none;font-family:"Segoe UI Symbol","Noto Sans Symbols 2",serif}
-.light{background:#f0d9b5}.dark{background:#b58863}
-.fileLabel,.rankLabel{font-size:11px;position:absolute;font-family:Arial,sans-serif;font-weight:bold;opacity:.8}
-.rankLabel{top:3px;left:4px}.fileLabel{bottom:3px;right:4px}
+.realBoard{width:100%;aspect-ratio:1;border:10px solid #24170f;border-radius:10px;overflow:hidden;display:grid;grid-template-columns:repeat(8,1fr);box-shadow:0 22px 55px #000b,0 0 0 2px #6f4930 inset,0 0 0 5px #120b08;box-sizing:border-box}
+.sq{display:flex;align-items:center;justify-content:center;position:relative;font-size:clamp(38px,7vw,76px);line-height:1;user-select:none;font-family:"Noto Sans Symbols 2","Segoe UI Symbol",serif;transition:filter .12s,transform .12s}
+.light{background:linear-gradient(135deg,#f3d7a0 0%,#d9b477 100%)}.dark{background:linear-gradient(135deg,#a66b3f 0%,#7b482b 100%)}
+.sq:hover{filter:brightness(1.08)}
+.piece-white{color:#fff8e7;text-shadow:0 2px 0 #b59b76,0 4px 8px #0009}
+.piece-black{color:#21150f;text-shadow:0 2px 1px #000,0 4px 7px #0008}
+.fileLabel,.rankLabel{font-size:11px;position:absolute;font-family:Arial,sans-serif;font-weight:800;opacity:.85;text-shadow:none}
+.light .fileLabel,.light .rankLabel{color:#7b482b}.dark .fileLabel,.dark .rankLabel{color:#f3d7a0}
+.rankLabel{top:3px;left:5px}.fileLabel{bottom:3px;right:5px}
 @media(max-width:800px){.courseView{grid-template-columns:1fr}.board{max-width:560px}}
 </style></head><body><h1>♟ Chess Mastery</h1><p class="muted">Your chess training platform.</p><div id="app"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.js"></script><script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script><script>
 let me=null;
 const A=async(u,o={})=>{let r=await fetch(u,{headers:{'Content-Type':'application/json'},...o}),j=await r.json();if(!r.ok)throw Error(j.error||'Error');return j};
 async function render(){
@@ -35,7 +39,7 @@ let board=null,positions=[],sans=[],ply=0;
 async function openC(id){let c=await A('/api/courses/'+id);let first=c.chapters.find(x=>!x.locked);document.getElementById('app').innerHTML='<button onclick="render()">← Back</button><div class="card"><h2>'+c.title+'</h2><p>'+c.description+'</p><div class="courseView"><div><div id="board" class="board"></div><div class="row"><button onclick="go(0)">⏮</button><button onclick="go(ply-1)">◀ Prev</button><button onclick="go(ply+1)">Next ▶</button><button onclick="go(positions.length-1)">⏭</button></div><p id="counter" class="muted"></p></div><div><h3>First 30 full moves</h3><div id="moves" class="moves"></div></div></div></div>';if(!first){document.getElementById('moves').innerHTML='<p>🔒 Course locked. <button onclick="buyCourse('+id+')">Pay with PayPal</button></p>';return}setupBoard(first.pgn)}
 function setupBoard(pgn){let g=new Chess();positions=[g.fen()];sans=[];for(const x of String(pgn||'').split(/\s+/)){if(!x||/^\d+\.(\.\.)?$/.test(x)||/^(1-0|0-1|1\/2-1\/2|\*)$/.test(x))continue;try{let m=g.move(x,{sloppy:true});if(m){sans.push(m.san);positions.push(g.fen())}}catch(e){}}positions=positions.slice(0,61);sans=sans.slice(0,60);ply=0;renderBoard(positions[0]);drawMoves();updateBoard()}
 function renderBoard(fen){let el=document.getElementById('board');if(!el)return;let map={'p':'♟','r':'♜','n':'♞','b':'♝','q':'♛','k':'♚','P':'♙','R':'♖','N':'♘','B':'♗','Q':'♕','K':'♔'};let rows=fen.split(' ')[0].split('/');let html='';for(let r=0;r<8;r++){let file=0;for(const ch of rows[r]){if(/\d/.test(ch)){for(let z=0;z<Number(ch);z++){html+=sqHtml(r,file,'');file++}}else{html+=sqHtml(r,file,map[ch]||'');file++}}}el.innerHTML='<div class="realBoard">'+html+'</div>'}
-function sqHtml(r,f,p){let label=(f===0?'<span class="rankLabel">'+(8-r)+'</span>':'')+(r===7?'<span class="fileLabel">'+String.fromCharCode(97+f)+'</span>':'');return '<div class="sq '+((r+f)%2?'dark':'light')+'">'+label+p+'</div>'}
+function sqHtml(r,f,p){let label=(f===0?'<span class="rankLabel">'+(8-r)+'</span>':'')+(r===7?'<span class="fileLabel">'+String.fromCharCode(97+f)+'</span>':'');let pc=p?'<span class="'+(p===p.toUpperCase()?'piece-white':'piece-black')+'">'+p+'</span>':'';return '<div class="sq '+((r+f)%2?'dark':'light')+'">'+label+pc+'</div>'}
 function go(n){ply=Math.max(0,Math.min(n,positions.length-1));updateBoard()}
 function updateBoard(){if(positions[ply])renderBoard(positions[ply]);let c=document.getElementById('counter');if(c)c.textContent='Move '+Math.ceil(ply/2)+' · '+ply+' ply · up to 30 full moves';drawMoves()}
 function drawMoves(){let e=document.getElementById('moves');if(!e)return;let o='';sans.forEach((m,i)=>o+='<span class="move '+(ply===i+1?'active':'')+'" onclick="go('+(i+1)+')">'+(i%2===0?(Math.floor(i/2)+1)+'. ':'')+m+'</span> ');e.innerHTML=o}
