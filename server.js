@@ -100,8 +100,9 @@ app.get('/api/courses/:id',(req,res)=>{
  if(!c)return res.status(404).json({error:'Course not found'});
  const u=current(req);
  const paid=!!(u&&db.prepare("SELECT id FROM purchases WHERE user_id=? AND course_id=? AND status='completed'").get(u.id,c.id));
+ const freeChapters=1;
  const chapters=db.prepare('SELECT id,chapter_number,title,pgn,start_fen FROM chapters WHERE course_id=? ORDER BY chapter_number').all(c.id)
- .map(ch=>({...ch,locked:!(u?.role==='admin'||paid||ch.chapter_number<=c.free_chapters),pgn:(u?.role==='admin'||paid||ch.chapter_number<=c.free_chapters)?ch.pgn:null}));
+ .map(ch=>({...ch,locked:!(u?.role==='admin'||paid||ch.chapter_number<=freeChapters),pgn:(u?.role==='admin'||paid||ch.chapter_number<=freeChapters)?ch.pgn:null}));
  res.json({...c,purchased:paid,chapters});
 });
 
