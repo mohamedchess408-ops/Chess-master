@@ -11,6 +11,7 @@ function ensureAuthTokenColumn(){const cols=db.prepare('PRAGMA table_info(users)
 
 app.set('trust proxy',1);
 
+app.use((req,res,next)=>{res.setHeader('Cache-Control','no-store');next()});
 app.use(express.json({limit:'5mb'}));
 app.use(session({secret:process.env.SESSION_SECRET||'chess-mastery-secret',resave:false,saveUninitialized:false,proxy:true,cookie:{httpOnly:true,sameSite:'lax',secure:true}}));
 
@@ -44,7 +45,7 @@ const email=x=>String(x||'').trim().toLowerCase();
 const hash=p=>{const s=crypto.randomBytes(16);return s.toString('hex')+':'+crypto.scryptSync(String(p),s,64).toString('hex')};
 const verify=(p,x)=>{try{const [a,b]=String(x).split(':');return crypto.timingSafeEqual(crypto.scryptSync(String(p),Buffer.from(a,'hex'),64),Buffer.from(b,'hex'))}catch{return false}};
 const pub=u=>u&&({id:u.id,name:u.name,email:u.email,chess_username:u.chess_username,contact:u.contact,role:u.role,created_at:u.created_at});
-const current=req=>{if(req.session.userId){const u=db.prepare('SELECT * FROM users WHERE id=?').get(req.session.userId);if(u)return u;}const h=String(req.headers.authorization||'');if(h.startsWith('Bearer '))return db.prepare('SELECT * FROM users WHERE auth_token=?').get(h.slice(7));return null;};
+const current=req=>{if(req.session.userId){const u=db.prepare('SELECT * FROM users WHERE id=?').get(req.session.userId);if(u)return u;}const h=String(req.headers.authorization||'');const t=h.startsWith('Bearer ')?h.slice(7):String(req.query?.token||'');return t?db.prepare('SELECT * FROM users WHERE auth_token=?').get(t):null;};
 const makeToken=()=>crypto.randomBytes(32).toString('hex');
 const auth=(req,res,next)=>{if(!current(req))return res.status(401).json({error:'Please log in first'});next()};
 const admin=(req,res,next)=>{const u=current(req);if(!u||u.role!=='admin')return res.status(403).json({error:'Admin only'});req.user=u;next()};
