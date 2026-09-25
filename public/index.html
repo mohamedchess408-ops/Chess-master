@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chess Mastery</title>
+<style>
+body{font-family:Arial,sans-serif;background:#0b1020;color:#eef;max-width:1000px;margin:auto;padding:24px}
+.card{background:#151d33;padding:20px;border-radius:14px;margin:14px 0;box-shadow:0 8px 30px #0003}
+button{padding:10px 14px;border:0;border-radius:9px;background:#7357ff;color:white;font-weight:bold;cursor:pointer}
+input,textarea{width:100%;box-sizing:border-box;padding:11px;margin:6px 0 12px;background:#0d1426;color:white;border:1px solid #33405e;border-radius:8px}
+.muted{color:#9aa8c2}.row{display:flex;gap:10px;flex-wrap:wrap}.chapter{padding:10px;border:1px solid #33405e;border-radius:8px;margin:7px 0}
+</style></head><body><h1>♟ Chess Mastery</h1><p class="muted">Your chess training platform.</p><div id="app"></div>
+<script>
+let me=null;
+const A=async(u,o={})=>{let r=await fetch(u,{headers:{'Content-Type':'application/json'},...o}),j=await r.json();if(!r.ok)throw Error(j.error||'Error');return j};
+async function render(){
+ me=(await A('/api/me')).user;let c=await A('/api/courses');
+ document.getElementById('app').innerHTML=(me?'<p>Welcome, '+me.name+' <button onclick="logout()">Logout</button></p>':'<div class="card"><h2>Login</h2><input id="e" placeholder="Email"><input id="p" type="password" placeholder="Password"><button onclick="login()">Login</button><h2>Register</h2><input id="n" placeholder="Name"><input id="re" placeholder="Email"><input id="rp" type="password" placeholder="Password (8+)"><input id="ch" placeholder="Lichess / Chess.com username"><input id="co" placeholder="WhatsApp / contact"><button onclick="reg()">Create account</button></div>')
+ +'<h2>Courses</h2>'+c.map(x=>'<div class="card"><h3>'+x.title+'</h3><p>'+x.description+'</p><b>$'+(x.price_cents/100).toFixed(2)+'</b><p>'+x.chapter_count+' chapters</p><button onclick="openC('+x.id+')">Open</button></div>').join('')
+ +(me?.role==='admin'?'<div class="card"><h2>Admin</h2><input id="ct" placeholder="Course title"><input id="cd" placeholder="Description"><input id="cp" type="number" step=".01" value="29.99"><input id="cf" type="number" value="1"><textarea id="pg" placeholder="Paste PGN"></textarea><button onclick="createC()">Create course</button></div>':'');
+}
+async function login(){try{await A('/api/auth/login',{method:'POST',body:JSON.stringify({email:e.value,password:p.value})});render()}catch(x){alert(x.message)}}
+async function reg(){try{await A('/api/auth/register',{method:'POST',body:JSON.stringify({name:n.value,email:re.value,password:rp.value,chess_username:ch.value,contact:co.value})});render()}catch(x){alert(x.message)}}
+async function logout(){await A('/api/auth/logout',{method:'POST'});render()}
+async function openC(id){let c=await A('/api/courses/'+id);alert(c.chapters.map(x=>x.chapter_number+'. '+x.title+(x.locked?' 🔒':'')).join('\n'))}
+async function createC(){try{let x=await A('/api/admin/courses',{method:'POST',body:JSON.stringify({title:ct.value,description:cd.value,price_cents:Number(cp.value)*100,free_chapters:Number(cf.value),pgn:pg.value})});alert('Created '+x.chapters+' chapters');render()}catch(e){alert(e.message)}}
+render();
+</script></body></html>
