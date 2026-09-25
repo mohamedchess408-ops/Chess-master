@@ -7,9 +7,10 @@ const path=require('path');
 const app=express();
 const db=new Database(process.env.DB_FILE||path.join(__dirname,'chess-mastery.db'));
 const PORT=process.env.PORT||3000;
+app.set('trust proxy',1);
 
 app.use(express.json({limit:'5mb'}));
-app.use(session({secret:process.env.SESSION_SECRET||'chess-mastery-secret',resave:false,saveUninitialized:false,cookie:{httpOnly:true,sameSite:'lax',secure:process.env.NODE_ENV==='production'}}));
+app.use(session({secret:process.env.SESSION_SECRET||'chess-mastery-secret',resave:false,saveUninitialized:false,proxy:true,cookie:{httpOnly:true,sameSite:'lax',secure:true}}));
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS users(
