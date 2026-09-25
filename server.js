@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS paypal_settings(
  id INTEGER PRIMARY KEY CHECK(id=1),client_id TEXT,client_secret TEXT,env TEXT DEFAULT 'sandbox'
 );`);
 
+ensureAuthTokenColumn();
+
 const email=x=>String(x||'').trim().toLowerCase();
 const hash=p=>{const s=crypto.randomBytes(16);return s.toString('hex')+':'+crypto.scryptSync(String(p),s,64).toString('hex')};
 const verify=(p,x)=>{try{const [a,b]=String(x).split(':');return crypto.timingSafeEqual(crypto.scryptSync(String(p),Buffer.from(a,'hex'),64),Buffer.from(b,'hex'))}catch{return false}};
