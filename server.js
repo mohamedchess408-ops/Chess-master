@@ -5,7 +5,7 @@ const Database=require('better-sqlite3');
 const crypto=require('crypto');
 const path=require('path');
 const app=express();
-const db=new Database(process.env.DB_FILE||'chess-mastery.db');
+const db=new Database(process.env.DB_FILE||path.join(__dirname,'chess-mastery.db'));
 const PORT=process.env.PORT||3000;
 
 app.use(express.json({limit:'5mb'}));
