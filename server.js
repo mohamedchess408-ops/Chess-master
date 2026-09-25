@@ -7,6 +7,8 @@ const path=require('path');
 const app=express();
 const db=new Database(process.env.DB_FILE||path.join(__dirname,'chess-mastery.db'));
 const PORT=process.env.PORT||3000;
+function ensureAuthTokenColumn(){const cols=db.prepare('PRAGMA table_info(users)').all();if(!cols.some(x=>x.name==='auth_token'))db.exec('ALTER TABLE users ADD COLUMN auth_token TEXT');}
+
 app.set('trust proxy',1);
 
 app.use(express.json({limit:'5mb'}));
@@ -40,7 +42,8 @@ const email=x=>String(x||'').trim().toLowerCase();
 const hash=p=>{const s=crypto.randomBytes(16);return s.toString('hex')+':'+crypto.scryptSync(String(p),s,64).toString('hex')};
 const verify=(p,x)=>{try{const [a,b]=String(x).split(':');return crypto.timingSafeEqual(crypto.scryptSync(String(p),Buffer.from(a,'hex'),64),Buffer.from(b,'hex'))}catch{return false}};
 const pub=u=>u&&({id:u.id,name:u.name,email:u.email,chess_username:u.chess_username,contact:u.contact,role:u.role,created_at:u.created_at});
-const current=req=>req.session.userId?db.prepare('SELECT * FROM users WHERE id=?').get(req.session.userId):null;
+const current=req=>{if(req.session.userId){const u=db.prepare('SELECT * FROM users WHERE id=?').get(req.session.userId);if(u)return u;}const h=String(req.headers.authorization||'');if(h.startsWith('Bearer '))return db.prepare('SELECT * FROM users WHERE auth_token=?').get(h.slice(7));return null;};
+const makeToken=()=>crypto.randomBytes(32).toString('hex');
 const auth=(req,res,next)=>{if(!current(req))return res.status(401).json({error:'Please log in first'});next()};
 const admin=(req,res,next)=>{const u=current(req);if(!u||u.role!=='admin')return res.status(403).json({error:'Admin only'});req.user=u;next()};
 
@@ -74,15 +77,16 @@ app.post('/api/auth/register',(req,res)=>{
  if(!String(name||'').trim()||!e||String(password||'').length<8)return res.status(400).json({error:'Enter a name, email and password of at least 8 characters.'});
  try{
   const role=db.prepare('SELECT id FROM users LIMIT 1').get()?'customer':'admin';
-  const id=db.prepare('INSERT INTO users(name,email,password_hash,chess_username,contact,role) VALUES(?,?,?,?,?,?)')
-   .run(String(name).trim(),email(e),hash(password),String(chess_username).trim(),String(contact).trim(),role).lastInsertRowid;
-  req.session.userId=id;req.session.save(err=>{if(err)return res.status(500).json({error:'Could not save login session.'});res.json({user:pub(current(req))})});
+  const token=makeToken();
+  const id=db.prepare('INSERT INTO users(name,email,password_hash,chess_username,contact,role,auth_token) VALUES(?,?,?,?,?,?,?)')
+   .run(String(name).trim(),email(e),hash(password),String(chess_username).trim(),String(contact).trim(),role,token).lastInsertRowid;
+  req.session.userId=id;req.session.save(err=>{if(err)return res.status(500).json({error:'Could not save login session.'});res.json({user:pub(current(req)),token})});
  }catch{res.status(400).json({error:'This email is already registered.'})}
 });
 app.post('/api/auth/login',(req,res)=>{
  const u=db.prepare('SELECT * FROM users WHERE email=?').get(email(req.body?.email));
  if(!u||!verify(req.body?.password,u.password_hash))return res.status(401).json({error:'Invalid email or password.'});
- req.session.userId=u.id;req.session.save(err=>{if(err)return res.status(500).json({error:'Could not save login session.'});res.json({user:pub(u)})});
+ const token=makeToken();db.prepare('UPDATE users SET auth_token=? WHERE id=?').run(token,u.id);req.session.userId=u.id;req.session.save(err=>{if(err)return res.status(500).json({error:'Could not save login session.'});res.json({user:pub(u),token})});
 });
 app.post('/api/auth/logout',(req,res)=>req.session.destroy(()=>res.json({ok:true})));
 app.put('/api/profile',auth,(req,res)=>{
