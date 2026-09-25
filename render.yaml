@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: chess-mastery
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_FILE
+        value: /var/data/chess-mastery.db
+      - key: SESSION_SECRET
+        generateValue: true
+    disk:
+      name: chess-mastery-data
+      mountPath: /var/data
+      sizeGB: 1
