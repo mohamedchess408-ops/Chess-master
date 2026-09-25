@@ -130,6 +130,7 @@ app.post('/api/admin/users/:id/role',admin,(req,res)=>{
  res.json({ok:true,role});
 });
 
+app.get('/api/paypal/config',(req,res)=>{const p=db.prepare('SELECT client_id,env FROM paypal_settings WHERE id=1').get();res.json({configured:!!p?.client_id,client_id:p?.client_id||'',env:p?.env||'sandbox'});});
 app.get('/api/admin/paypal',admin,(req,res)=>{
  const p=db.prepare('SELECT client_id,env FROM paypal_settings WHERE id=1').get();
  res.json({configured:!!p?.client_id,client_id:p?.client_id||'',env:p?.env||'sandbox'});
