@@ -62,7 +62,7 @@ function pgnTokens(pgn){
 }
 function splitPgn(pgn){
  const t=pgnTokens(pgn),out=[];
- for(let i=0,n=1;i<t.length;i+=60,n++)out.push({number:n,pgn:t.slice(i,i+60).join(' ')});
+ for(let i=0,n=1;i<t.length;i+=40,n++)out.push({number:n,pgn:t.slice(i,i+40).join(' ')});
  return out;
 }
 
